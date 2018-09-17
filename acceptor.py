@@ -31,7 +31,7 @@ logger = logging.getLogger("acceptor")
 class Acceptor:
 
     _highest_proposal_to_date = -1
-    last_promise = None
+    last_promises = {}
 
     def set_last_promise(self, last_promise):
         self.last_promise = last_promise
