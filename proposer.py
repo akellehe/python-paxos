@@ -32,11 +32,11 @@ class Proposer:
         return self.acceptors[0:quorum]
 
     @tornado.gen.coroutine
-    def send_prepare(self, value):
+    def send_prepare(self, key, value):
         print("Proposer is sending prepare...")
         prepare_responses = []
         failed_responses = []
-        prepare = Prepare(proposal=Proposal(value=value))
+        prepare = Prepare(proposal=Proposal(key=key, value=value))
         print("Prepare created with proposal.id=", prepare.proposal.id)
         for url in self.get_quorum():
             resp = yield send(url + "/prepare", prepare)
@@ -90,11 +90,12 @@ class ClientHandler(Handler):
     @tornado.gen.coroutine
     def post(self):
         logger.info("Got request body %s", self.request.body)
-        value = json.loads(self.request.body).get('value')
+        client_request = json.loads(self.request.body)
+        key, value = client_request.get('key'), client_request.get('value')
 
         # Phase 1a: Prepare
         # Send prepare with id >= any other prepare from this proposer.
-        prepare, prepare_responses, failed_responses = yield self.proposer.send_prepare(value)
+        prepare, prepare_responses, failed_responses = yield self.proposer.send_prepare(key, value)
         prepare.proposal.update(
             self.proposer.get_max_proposal_id(prepare_responses + failed_responses) + 1)
 

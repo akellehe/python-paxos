@@ -28,8 +28,9 @@ class Proposal:
 
     _id = 0
 
-    def __init__(self, id=None, value=None):
+    def __init__(self, id=None, key=None, value=None):
         self.id = id
+        self.key = key
         self.value = value
         if id is None:
             self.id = Proposal._id
@@ -37,11 +38,11 @@ class Proposal:
             Proposal._id += 1
 
     def to_json(self):
-        return {'id': self.id, 'value': self.value}
+        return {'id': self.id, 'key': self.key, 'value': self.value}
 
     @classmethod
     def from_json(cls, js):
-        return Proposal(id=js.get('id'), value=js.get('value'))
+        return Proposal(id=js.get('id'), key=js.get('key'), value=js.get('value'))
 
     def update(self, highest_accepted_proposal_id):
         print("Updating id to", max(self.id, highest_accepted_proposal_id))

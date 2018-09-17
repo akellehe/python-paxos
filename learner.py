@@ -26,8 +26,8 @@ class Learner(Handler):
         Receive the AcceptRequest statement from the proposer.
         """
         proposal = Proposal.from_json(json.loads(self.request.body).get('proposal'))
-        payloads[proposal.id]['payload'] = proposal.to_json()
-        payloads[proposal.id]['votes'] += 1
+        payloads[proposal.key]['payload'] = proposal.value
+        payloads[proposal.key]['votes'] += 1
 
         self.set_header('Content-Type', 'application/json')
         if payloads[proposal.id]['votes'] >= QUORUM:
