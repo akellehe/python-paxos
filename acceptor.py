@@ -28,7 +28,6 @@ from utils import (
 define("port", default=8889, help="run on the given port", type=int)
 logger = logging.getLogger("acceptor")
 
-
 class Acceptor:
 
     _highest_proposal_to_date = -1
