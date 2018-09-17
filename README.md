@@ -2,7 +2,15 @@
 
 ## Getting started
 
-You can get up and running by just running `./bootstrap.sh`.
+You should add the following lines to `/etc/hosts`
+
+```
+127.0.0.1   learner.io
+127.0.0.1   acceptor.io
+127.0.0.1   proposer.io
+```
+
+Then you can get up and running by just running `./bootstrap.sh`.
 
 It will start:
 
@@ -15,6 +23,8 @@ Then you can call them using `client.py` by running
 ```
 python3 client.py
 ```
+
+If you want to send new proposals, you can modify `client.py`
 
 ## Known Issues
 
