@@ -16,6 +16,11 @@ Then you can call them using `client.py` by running
 python3 client.py
 ```
 
+## Known Issues
+
+ - The Acceptor needs to store the state of requests in progress
+ - The Proposer needs to stop what it is doing when it gets an earlier promise, and finish the earlier promise.
+
 Check out these resources for more information:
 
  - https://en.wikipedia.org/wiki/Paxos_(computer_science)#Phase_2b:_Accepted
