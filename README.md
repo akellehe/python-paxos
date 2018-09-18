@@ -28,11 +28,12 @@ If you want to send new proposals, you can modify `client.py`
 
 ## Known Issues
 
+ - When each Learner has "committed" a given change, the client should receive 'COMMITTED' but it is receiving 'ACK'.
  - The Acceptor needs to store the state of requests in progress
  - The Proposer needs to stop what it is doing when it gets an earlier promise, and finish the earlier promise.
 
 Check out these resources for more information:
-
+ - https://docs.google.com/presentation/d/1OGKyQZZ1aV6w8bGoWaQVwzjFDwoqfYM6xjAF22rA18k/edit#slide=id.g41ff1175c6_0_53
  - https://en.wikipedia.org/wiki/Paxos_(computer_science)#Phase_2b:_Accepted
  - https://www.datastax.com/dev/blog/lightweight-transactions-in-cassandra-2-0
  - http://www.cs.utexas.edu/users/lorenzo/corsi/cs380d/past/03F/notes/paxos-simple.pdf

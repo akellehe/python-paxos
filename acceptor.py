@@ -37,11 +37,13 @@ class Acceptor:
         self.last_promise = None
 
     def set_last_promise(self, last_promise):
-        self.last_promise = last_promise
+        Acceptor._current_requests[last_promise.proposal.key] = last_promise
         Acceptor._highest_proposal_to_date = last_promise.prepare.proposal.id
 
-    def get_last_promise(self):
-        return self.last_promise
+    def get_last_promise(self, key):
+        if key in Acceptor._current_requests:
+
+        return Acceptor._current_requests[key]
 
     @classmethod
     def highest_proposal(cls, highest_proposal=None):
