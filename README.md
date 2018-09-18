@@ -28,9 +28,13 @@ If you want to send new proposals, you can modify `client.py`
 
 ## Known Issues
 
- - When each Learner has "committed" a given change, the client should receive 'COMMITTED' but it is receiving 'ACK'.
- - The Acceptor needs to store the state of requests in progress
  - The Proposer needs to stop what it is doing when it gets an earlier promise, and finish the earlier promise.
+
+## Questions for the next meetup.
+
+ - Is it OK to consider a message `COMMITTED` if we only receive 1 `ACCEPTED` message from an acceptor?
+ - What happens when a learner goes away? How does paxos provide a mechanism for them to re-sync?
+ - What happens when there is an acceptor split brain?
 
 Check out these resources for more information:
  - https://docs.google.com/presentation/d/1OGKyQZZ1aV6w8bGoWaQVwzjFDwoqfYM6xjAF22rA18k/edit#slide=id.g41ff1175c6_0_53
