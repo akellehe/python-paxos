@@ -36,14 +36,18 @@ class Acceptor:
     def __init__(self):
         self.last_promise = None
 
+    def remove_last_promise(self, key):
+        if key not in Acceptor._current_requests:
+            return None
+
     def set_last_promise(self, last_promise):
-        Acceptor._current_requests[last_promise.proposal.key] = last_promise
+        Acceptor._current_requests[last_promise.prepare.proposal.key] = last_promise
         Acceptor._highest_proposal_to_date = last_promise.prepare.proposal.id
 
     def get_last_promise(self, key):
         if key in Acceptor._current_requests:
-
-        return Acceptor._current_requests[key]
+            return Acceptor._current_requests[key]
+        return None
 
     @classmethod
     def highest_proposal(cls, highest_proposal=None):
@@ -75,10 +79,9 @@ class PrepareHandler(Handler):
         Receive the prepare statement from the proposer.
         """
         prepare = Prepare.from_json(json.loads(self.request.body))
-        last_promise = acceptor.get_last_promise()
+        last_promise = acceptor.get_last_promise(prepare.proposal.key)
         promise = Promise(prepare=prepare,
                           status=Promise.ACK if acceptor.should_promise(prepare) else Promise.NACK)
-
         if promise.status == promise.NACK:
             logger.info("Acceptor N'acked.")
         else:
@@ -121,6 +124,7 @@ class AcceptRequestHandler(Handler):
         if accept_request_response.status == AcceptRequestResponse.NACK:
             self.set_status(409)
 
+        acceptor.remove_last_promise(accept_request.proposal.key)
         self.respond(accept_request_response)  # Send to proposer
 
     @tornado.gen.coroutine
