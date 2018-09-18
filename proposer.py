@@ -42,11 +42,9 @@ class Proposer:
             resp = yield send(url + "/prepare", prepare)
             if resp.code == 200:
                 prepare_response = PrepareResponse.from_json(json.loads(resp.body))
-
                 if prepare_response.promise.status == Promise.ACK:
                     prepare_responses.append(prepare_response)
                 else:
-                    logger.info("FAILED TO PREPARE: %s", resp.body)
                     failed_responses.append(prepare_response)
             else:
                 raise Exception("/prepare call failed. " + resp.body)
@@ -65,8 +63,7 @@ class Proposer:
             else:
                 arr = AcceptRequestResponse(
                         proposal=accept_request.proposal,
-                        status=AcceptRequestResponse.NACK
-                    )
+                        status=AcceptRequestResponse.NACK)
                 arr.error = str(resp.code) + ": " + resp.text
                 accept_request_responses.append(arr)
 
@@ -77,8 +74,7 @@ class Proposer:
         max_proposal = -1
         for prepare_response in prepare_responses:
             if prepare_response.last_promise:
-                max_proposal = max(prepare_response.last_promise.prepare.proposal.id,
-                                   max_proposal)
+
         print("Max proposal id promised by acceptors is", max_proposal)
         return max_proposal
 
@@ -96,8 +92,7 @@ class ClientHandler(Handler):
         # Phase 1a: Prepare
         # Send prepare with id >= any other prepare from this proposer.
         prepare, prepare_responses, failed_responses = yield self.proposer.send_prepare(key, value)
-        prepare.proposal.update(
-            self.proposer.get_max_proposal_id(prepare_responses + failed_responses) + 1)
+
 
         # Phase 2a: Accept Request
         # If there are enough promises set; maybe-update the proposal value.

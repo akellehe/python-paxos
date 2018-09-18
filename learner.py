@@ -15,7 +15,7 @@ from settings import TORNADO_SETTINGS, ACCEPTOR_URLS
 
 
 QUORUM = int(len(ACCEPTOR_URLS) / 2) + 1
-payloads = collections.defaultdict(lambda: {'votes': 0, 'payload': None})
+payloads = collections.defaultdict(lambda: {'payload': None})
 logger = logging.getLogger('learner')
 
 define("port", default=8888, help="run on the given port", type=int)
@@ -31,14 +31,8 @@ class Learner(Handler):
         logger.info("Got a proposal for key %s", proposal.key)
         logger.info("Setting payload to %s", proposal.value)
         payloads[proposal.key]['payload'] = proposal.value
-        payloads[proposal.key]['votes'] += 1
-        logger.info("Votes is now %s", payloads[proposal.key]['votes'])
-
         self.set_header('Content-Type', 'application/json')
-        if payloads[proposal.key]['votes'] >= QUORUM:
-            self.write({'status': 'COMMITTED'})
-        elif payloads[proposal.key]['votes'] < QUORUM:
-            self.write({'status': 'VOTED'})
+        self.write({'status': 'COMMITTED'})
         self.finish()
 
     @tornado.gen.coroutine

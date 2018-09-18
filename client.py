@@ -17,7 +17,7 @@ def sync():
         response = requests.post(url + "/",
             data=json.dumps({
                 "key": "foo", 
-                "value": "Hello world!"
+                "value": "This is the {} update!".format(i)
             }), headers={'Content-Type': 'application/json'})
         print(response.text)
         if response.status_code == 200:
