@@ -11,10 +11,10 @@ import tornado.gen
 from tornado.options import define, options
 
 from settings import ACCEPTOR_URLS, TORNADO_SETTINGS
-from utils import Prepare, Proposal, PrepareResponse, AcceptRequest, AcceptRequestResponse, send, Promise, Handler, ClientResponse
+from utils import get_logger, Prepare, Proposal, PrepareResponse, AcceptRequest, AcceptRequestResponse, send, Promise, Handler, ClientResponse
 
 define("port", default=8888, help="run on the given port", type=int)
-logger = logging.getLogger("proposer")
+logger = get_logger('proposer')
 
 
 class Proposer:
@@ -33,50 +33,38 @@ class Proposer:
 
     @tornado.gen.coroutine
     def send_prepare(self, key, value):
-        print("Proposer is sending prepare...")
+        logger.info("Proposer is sending prepare...")
         prepare_responses = []
         failed_responses = []
         prepare = Prepare(proposal=Proposal(key=key, value=value))
-        print("Prepare created with proposal.id=", prepare.proposal.id)
+        logger.info("Prepare created with proposal.id=%s", prepare.proposal.id)
         for url in self.get_quorum():
             resp = yield send(url + "/prepare", prepare)
-            if resp.code == 200:
+            if resp.code == 202:  # 202=Accepted
                 prepare_response = PrepareResponse.from_json(json.loads(resp.body))
-                if prepare_response.promise.status == Promise.ACK:
-                    prepare_responses.append(prepare_response)
-                else:
-                    failed_responses.append(prepare_response)
+                prepare_responses.append(prepare_response)
+            elif resp.code == 409: # 409=Conflict
+                logger.warning("CONFLICT! Handle conflict here.")
             else:
-                raise Exception("/prepare call failed. " + resp.body)
+                failed_responses.append(resp)
+
         raise tornado.gen.Return([prepare, prepare_responses, failed_responses])
 
     @tornado.gen.coroutine
-    def send_accept_request(self, accept_request):
-        print("Proposer is sending AcceptRequest")
+    def send_propose(self, accept_request):
+        logger.info("Proposer is sending AcceptRequest")
         accept_request_responses = []
         for url in self.get_quorum():
             resp = yield send(url + "/accept_request", accept_request)
-            if resp.code == 200:
+            if resp.code == 202:  # 202=Accepted
                 accept_request_responses.append(
                     AcceptRequestResponse.from_json(
                         json.loads(resp.body)))
             else:
-                arr = AcceptRequestResponse(
-                        proposal=accept_request.proposal,
-                        status=AcceptRequestResponse.NACK)
-                arr.error = str(resp.code) + ": " + resp.text
-                accept_request_responses.append(arr)
+                raise tornado.web.HTTPError(status_code=resp.code,
+                                            log_message="Proposal failed to be accepted.")
 
         raise tornado.gen.Return(accept_request_responses)
-
-    @classmethod
-    def get_max_proposal_id(cls, prepare_responses):
-        max_proposal = -1
-        for prepare_response in prepare_responses:
-            if prepare_response.last_promise:
-
-        print("Max proposal id promised by acceptors is", max_proposal)
-        return max_proposal
 
 
 class ClientHandler(Handler):
@@ -89,28 +77,23 @@ class ClientHandler(Handler):
         client_request = json.loads(self.request.body)
         key, value = client_request.get('key'), client_request.get('value')
 
-        # Phase 1a: Prepare
-        # Send prepare with id >= any other prepare from this proposer.
-        prepare, prepare_responses, failed_responses = yield self.proposer.send_prepare(key, value)
+        prepare, prepare_responses, failed_responses = yield self.proposer.send_prepare(
+            key, value)
 
-
-        # Phase 2a: Accept Request
-        # If there are enough promises set; maybe-update the proposal value.
         if len(prepare_responses) < self.proposer.how_many_is_a_quorum():
             raise tornado.web.HTTPError(status_code=409,
                                         log_message="Failed to get the required number of promises. {}/{}".format(
                                         len(prepare_responses), self.proposer.how_many_is_a_quorum()))
 
-        accept_request_responses = yield self.proposer.send_accept_request(
+        accept_request_responses = yield self.proposer.send_propose(
             AcceptRequest(prepare.proposal))
 
-        client_response = ClientResponse(prepare.proposal, status=ClientResponse.NACK)
+        client_response = ClientResponse(prepare.proposal, status=ClientResponse.FAILURE)
         for accept_request_response in accept_request_responses:
-            if accept_request_response.status == AcceptRequestResponse.COMMITTED:
-                client_response.status = ClientResponse.COMMITTED
-                break
+            if accept_request_response.status == AcceptRequestResponse.ACCEPTED:
+                client_response.status = ClientResponse.SUCCESS
 
-        self.respond(accept_request_response)
+        self.respond(client_response, code=201)
 
     @tornado.gen.coroutine
     def get(self):
@@ -132,7 +115,7 @@ def main():
     ], **TORNADO_SETTINGS)
     http_server = tornado.httpserver.HTTPServer(application)
     http_server.listen(options.port)
-    print("Proposer listening on port", options.port)
+    logger.info("Proposer listening on port %s", options.port)
     tornado.ioloop.IOLoop.current().start()
 
 

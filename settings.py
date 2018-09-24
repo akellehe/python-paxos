@@ -9,7 +9,7 @@ LEARNER_URLS = ['{}:{}'.format(LEARNER_URL, learner_port)
                 for learner_port in LEARNER_PORTS]
 
 PROPOSER_URL = 'http://proposer.io'
-PROPOSER_PORTS = [8888]
+PROPOSER_PORTS = [8888, 8893]
 PROPOSER_URLS = ['{}:{}'.format(PROPOSER_URL, proposer_port)
                  for proposer_port in PROPOSER_PORTS]
 

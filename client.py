@@ -12,21 +12,19 @@ failures = collections.defaultdict(int)
 
 
 def sync():
-    for i in range(20):
-        url = random.choice(PROPOSER_URLS)
-        response = requests.post(url + "/",
-            data=json.dumps({
-                "key": "foo", 
-                "value": "This is the {} update!".format(i)
-            }), headers={'Content-Type': 'application/json'})
-        print(response.text)
-        if response.status_code == 200:
-            sys.stdout.write('.')
-        else:
-            failures[url] += 1
-            sys.stdout.write('x')
-        sys.stdout.flush()
-    print("Failures", failures)
+    url = random.choice(PROPOSER_URLS)
+    response = requests.post(url + "/",
+        data=json.dumps({
+            "key": "foo", 
+            "value": "This is the {} update!".format(random.random())
+        }), headers={'Content-Type': 'application/json'})
+    print(response.text)
+    if 200 <= response.status_code < 300:
+        sys.stdout.write('.')
+    else:
+        failures[url] += 1
+        sys.stdout.write('x')
+    sys.stdout.flush()
 
 sync()
 print("Failures", failures)

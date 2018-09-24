@@ -18,6 +18,7 @@ from settings import LEARNER_URLS
 from utils import (
     AcceptRequest,
     AcceptRequestResponse,
+    get_logger,
     Handler,
     Prepare,
     PrepareResponse,
@@ -26,25 +27,31 @@ from utils import (
 )
 
 define("port", default=8889, help="run on the given port", type=int)
-logger = logging.getLogger("acceptor")
+logger = get_logger('acceptor')
 
 class Acceptor:
 
     _highest_proposal_to_date = -1
     _current_requests = {}
 
-    def __init__(self):
-        self.last_promise = None
-
-    def remove_last_promise(self, key):
+    @classmethod
+    def remove_last_promise(cls, key):
+        logger.warning("Removing promises for key %s", key)
         if key not in Acceptor._current_requests:
+            logger.warning("Key not found in current requests: k=%s, r=%s", key, Acceptor._current_requests)
             return None
+        logger.warning("Removing current request for key %s: %s", key, Acceptor._current_requests)
+        del Acceptor._current_requests[key]
+        logger.warning("after: %s", Acceptor._current_requests)
 
-    def set_last_promise(self, last_promise):
+    @classmethod
+    def set_last_promise(cls, last_promise):
+        logger.warning("Setting last promise for key %s", last_promise.prepare.proposal.key)
         Acceptor._current_requests[last_promise.prepare.proposal.key] = last_promise
-        Acceptor._highest_proposal_to_date = last_promise.prepare.proposal.id
+        cls._highest_proposal_to_date = last_promise.prepare.proposal.id
 
-    def get_last_promise(self, key):
+    @classmethod
+    def get_last_promise(cls, key):
         if key in Acceptor._current_requests:
             return Acceptor._current_requests[key]
         return None
@@ -66,6 +73,18 @@ class Acceptor:
     @classmethod
     def should_accept(cls, accept_request):
         return accept_request.proposal.id >= cls.highest_proposal()
+    
+    @tornado.gen.coroutine
+    def send_to_learners(self, proposal):
+        successes, failures = [], []
+        for learner_url in LEARNER_URLS:
+            resp = yield send(learner_url + "/learn", proposal)  # send to all learners.
+            if resp.code == 201:
+                successes.append(learner_url)
+            else:
+                logger.error("Learner failed with response: %s: %s", resp.code, resp.body)
+                failures.append(learner_url)
+        raise tornado.gen.Return(tuple([len(successes) > len(failures), failures]))
 
 
 acceptor = Acceptor()
@@ -73,29 +92,52 @@ acceptor = Acceptor()
 
 class PrepareHandler(Handler):
 
-    @tornado.gen.coroutine
+    def reject_prepare(self, prepare):
+        # The proposal number was too low
+        self.respond(PrepareResponse())
+
+    def issue_promise(self, prepare):
+        last_promise = acceptor.get_last_promise(prepare.proposal.key)
+        promise = Promise(prepare=prepare)
+        logger.info("Acceptor is promising to accept proposals >= %s", prepare.proposal.id)
+        if last_promise:
+            logger.info("But the acceptor has an existing promise for key %s: %s", prepare.proposal.key, last_promise.to_json())
+        self.respond(PrepareResponse(promise, last_promise),
+                     code=202 if not last_promise else 409)
+        acceptor.set_last_promise(promise)
+
     def post(self):
         """
         Receive the prepare statement from the proposer.
         """
         prepare = Prepare.from_json(json.loads(self.request.body))
-        last_promise = acceptor.get_last_promise(prepare.proposal.key)
-        promise = Promise(prepare=prepare,
-                          status=Promise.ACK if acceptor.should_promise(prepare) else Promise.NACK)
-        if promise.status == promise.NACK:
-            logger.info("Acceptor N'acked.")
+        if acceptor.should_promise(prepare):
+            self.issue_promise(prepare)
         else:
-            logger.info("Acceptor is promising to accept proposals >= %s", prepare.proposal.id)
-            acceptor.set_last_promise(promise)
-        self.respond(PrepareResponse(promise, last_promise))
+            self.reject_prepare(prepare)
 
-    @tornado.gen.coroutine
     def get(self):
         self.write({"status": "SUCCESS"})
         self.finish()
 
 
 class AcceptRequestHandler(Handler):
+        
+    def reject_accept_request(self, accept_request, failures=None):
+        if failures is None:
+            failures = []
+        self.respond(AcceptRequestResponse(
+            accept_request.proposal,
+            status=AcceptRequestResponse.REJECTED,
+            error="\n".join(failures)
+        ), code=500)
+
+    def accept_accept_request(self, accept_request):
+        acceptor.remove_last_promise(accept_request.proposal.key)
+        self.respond(AcceptRequestResponse(
+            accept_request.proposal,
+            status=AcceptRequestResponse.ACCEPTED
+        ), code=202)
 
     @tornado.gen.coroutine
     def post(self):
@@ -104,28 +146,13 @@ class AcceptRequestHandler(Handler):
         """
         logger.info("Request body in AcceptRequestHandler: %s", self.request.body)
         accept_request = AcceptRequest.from_json(json.loads(self.request.body))
-        accept_request_response = AcceptRequestResponse(accept_request.proposal,
-                                                        status=AcceptRequestResponse.NACK)
+        success, failures = False, []
         if acceptor.should_accept(accept_request):
-            for learner_url in LEARNER_URLS:
-                resp = yield send(learner_url + "/learn", accept_request_response)  # send to all learners.
-                learner_response = json.loads(resp.body)
-                if learner_response.get('status') == AcceptRequestResponse.COMMITTED:
-                    accept_request_response.set_status(AcceptRequestResponse.COMMITTED)
-                elif resp.code == 200:
-                    accept_request_response.set_status(AcceptRequestResponse.ACK)
-                else:
-                    accept_request_response.set_status(AcceptRequestResponse.NACK)
+            success, failures = yield acceptor.send_to_learners(accept_request.proposal)
+        if not success:
+            self.reject_accept_request(accept_request, failures)
         else:
-            logger.error("Acceptor received proposal id=%s but the highest is %s. REJECTED",
-                         accept_request.proposal.id, acceptor.highest_proposal())
-            accept_request_response.set_status(AcceptRequestResponse.NACK)
-
-        if accept_request_response.status == AcceptRequestResponse.NACK:
-            self.set_status(409)
-
-        acceptor.remove_last_promise(accept_request.proposal.key)
-        self.respond(accept_request_response)  # Send to proposer
+            self.accept_accept_request(accept_request)
 
     @tornado.gen.coroutine
     def get(self):
@@ -134,6 +161,18 @@ class AcceptRequestHandler(Handler):
 
 
 def main():
+    """
+    TODO: When we send a promise to one majority, then we send the "accept" to another majority; the first majority
+    does not know to retire the promise. That means new requests will be interpreted as a conflict. What is the most
+    stateless way to maintain information about what should be done with the pending promise?
+
+     - In the case that a promise is lost (e.g. something falls over during it's processing) it won't be written to the
+       learners and needs to be restarted by the proposer.
+     - If the proposer remembers the quorum to which it submitted the prepare; then we have a single point of failure
+       for tracking the completeness of that processing (the proposer).
+     - If we leave the pending request in the state of the acceptors; there is no way to know on which acceptors the
+       stale promise should be retired.
+    """
     tornado.options.parse_command_line()
     application = tornado.web.Application([
         (r"/prepare", PrepareHandler),

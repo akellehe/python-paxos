@@ -6,12 +6,11 @@ import tornado.gen
 import tornado.httpclient
 
 
-logger = logging.getLogger('utils')
-
 
 class Handler(tornado.web.RequestHandler):
 
-    def respond(self, message):
+    def respond(self, message, code=201):
+        self.set_status(code)
         self.set_header('Content-Type', 'application/json')
         self.write(json.dumps(message.to_json()))
         self.finish()
@@ -81,68 +80,63 @@ class AcceptRequest(Message):
 
 class AcceptRequestResponse(Message):
 
-    ACK = 'ACK'
-    NACK = 'NACK'
-    COMMITTED = 'COMMITTED'
+    ACCEPTED = 'ACCEPTED'
+    REJECTED = 'REJECTED'
 
-    def __init__(self, proposal, status='ACK'):
+    def __init__(self, proposal, status='ACCEPTED', error=None):
         self.proposal = proposal
         self.status = status
-        self.error = None
+        self.error = error
 
     def set_status(self, status):
         self.status = status
 
     def to_json(self):
-        return {'proposal': self.proposal.to_json(), 'status': self.status}
+        return {'proposal': self.proposal.to_json(), 'status': self.status, 'error': self.error}
 
     @classmethod
     def from_json(cls, js):
         return AcceptRequestResponse(
             proposal=Proposal.from_json(js.get('proposal')),
-            status=js.get('status')
+            status=js.get('status'),
+            error=js.get('error')
         )
 
 
 class Promise:
 
-    ACK = 'ACK'
-    NACK = 'NACK'
-
-    def __init__(self, prepare, status='ACK'):
+    def __init__(self, prepare):
         self.prepare = prepare
-        self.status = status
 
     def to_json(self):
-        return {'prepare': self.prepare.to_json(),
-                'status': self.status}
+        return {'prepare': self.prepare.to_json()}
 
     @classmethod
     def from_json(cls, js):
-        return Promise(prepare=Prepare.from_json(js.get('prepare')),
-                       status=js.get('status'))
+        return Promise(prepare=Prepare.from_json(js.get('prepare')))
 
 
 class PrepareResponse:
 
-    def __init__(self, promise, last_promise):
+    def __init__(self, promise=None, last_promise=None):
         self.promise = promise
         self.last_promise = last_promise
 
     def to_json(self):
         return {
-            'promise': self.promise.to_json(),
+            'promise': self.promise.to_json() if self.promise else None,
             'last_promise': self.last_promise.to_json() if self.last_promise else None
         }
 
     @classmethod
     def from_json(cls, js):
-        last_promise = None
+        promise, last_promise = None, None
         logger.info("Converting to prepared response from json %s", js)
         if js.get('last_promise'):
             last_promise = Promise.from_json(js.get('last_promise'))
-        return PrepareResponse(promise=Promise.from_json(js.get('promise')),
-                               last_promise=last_promise)
+        if js.get('promise'):
+            promise = Promise.from_json(js.get('promise'))
+        return PrepareResponse(promise=promise, last_promise=last_promise)
 
 
 @tornado.gen.coroutine
@@ -157,20 +151,44 @@ def send(url, message):
         headers={'Content-Type': 'application/json'},
         body=json.dumps(message.to_json())
     )
-    resp = yield client.fetch(request, raise_error=True)
+    resp = yield client.fetch(request, raise_error=False)
     raise tornado.gen.Return(resp)
+
 
 class ClientResponse(Message):
 
-    COMMITTED = 'COMMITTED'
-    ACK = 'ACK'
-    NACK = 'NACK'
+    SUCCESS = 'SUCCESS'
+    FAILURE = 'FAILURE'
 
     def __init__(self, proposal, status):
         self.proposal = proposal
         self.status = status
 
     def to_json(self):
-        return {'proposal': proposal.to_json(),
+        return {'proposal': self.proposal.to_json(),
                 'status': self.status}
 
+
+class LearnerResponse(Message):
+
+    def __init__(self, proposal, status):
+        self.proposal = proposal
+        self.status = status
+
+    def to_json(self):
+        return {'proposal': self.proposal.to_json(),
+                'status': self.status}
+
+    @classmethod
+    def from_json(cls, js):
+        return cls(
+            proposal=Proposal.from_json(js.get('proposal')),
+            status=js.get('status')
+        )
+
+
+def get_logger(name):
+    logging.basicConfig(format='%(levelname)s - %(filename)s:L%(lineno)d pid=%(process)d - %(message)s')
+    return logging.getLogger(name)
+
+logger = get_logger('utils')

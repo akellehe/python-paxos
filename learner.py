@@ -9,14 +9,13 @@ import tornado.ioloop
 
 from tornado.options import options, define
 
-from utils import Handler, Proposal
+from utils import Handler, Proposal, LearnerResponse, get_logger
 
 from settings import TORNADO_SETTINGS, ACCEPTOR_URLS
 
 
-QUORUM = int(len(ACCEPTOR_URLS) / 2) + 1
 payloads = collections.defaultdict(lambda: {'payload': None})
-logger = logging.getLogger('learner')
+logger = get_logger('learner')
 
 define("port", default=8888, help="run on the given port", type=int)
 
@@ -27,13 +26,14 @@ class Learner(Handler):
         """
         Receive the AcceptRequest statement from the proposer.
         """
-        proposal = Proposal.from_json(json.loads(self.request.body).get('proposal'))
+        proposal = Proposal.from_json(json.loads(self.request.body))
         logger.info("Got a proposal for key %s", proposal.key)
         logger.info("Setting payload to %s", proposal.value)
         payloads[proposal.key]['payload'] = proposal.value
-        self.set_header('Content-Type', 'application/json')
-        self.write({'status': 'COMMITTED'})
-        self.finish()
+        self.respond(LearnerResponse(
+            proposal=proposal,
+            status='SUCCESS'
+        ), 201)
 
     @tornado.gen.coroutine
     def get(self):
@@ -48,7 +48,7 @@ def main():
     ], **TORNADO_SETTINGS)
     http_server = tornado.httpserver.HTTPServer(application)
     http_server.listen(options.port)
-    print("Learniner listening on port", options.port)
+    logger.info("Learner listening on port %s", options.port)
     tornado.ioloop.IOLoop.current().start()
 
 
