@@ -85,6 +85,13 @@ class ClientHandler(Handler):
                                         log_message="Failed to get the required number of promises. {}/{}".format(
                                         len(prepare_responses), self.proposer.how_many_is_a_quorum()))
 
+        for prepare_response in prepare_responses:
+            last_promise = prepare_response.last_promise
+            promise = prepare_response.promise
+            if last_promise and last_promise.value == promise.value:
+                # Another proposer has this in progress. Update the ID to match the in-progress version.
+                prepare.proposal.id = last_promise.prepare.proposal.id
+
         accept_request_responses = yield self.proposer.send_propose(
             AcceptRequest(prepare.proposal))
 
