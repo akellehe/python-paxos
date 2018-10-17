@@ -40,14 +40,13 @@ class Proposer:
         logger.info("Prepare created with proposal.id=%s", prepare.proposal.id)
         for url in self.get_quorum():
             resp = yield send(url + "/prepare", prepare)
-            if resp.code == 202:  # 202=Accepted
+            if resp.code == 409:
+                logger.warning("There is an earlier promise to be handled.")
+            if resp.code == 202 or resp.code == 409:  # 202=Accepted, a promise was issued with no earlier promise
                 prepare_response = PrepareResponse.from_json(json.loads(resp.body))
                 prepare_responses.append(prepare_response)
-            elif resp.code == 409: # 409=Conflict
-                logger.warning("CONFLICT! Handle conflict here.")
             else:
                 failed_responses.append(resp)
-
         raise tornado.gen.Return([prepare, prepare_responses, failed_responses])
 
     @tornado.gen.coroutine
@@ -62,8 +61,7 @@ class Proposer:
                         json.loads(resp.body)))
             else:
                 raise tornado.web.HTTPError(status_code=resp.code,
-                                            log_message="Proposal failed to be accepted.")
-
+                                            log_message="Proposal failed to be accepted by a quorum.")
         raise tornado.gen.Return(accept_request_responses)
 
 
@@ -81,16 +79,19 @@ class ClientHandler(Handler):
             key, value)
 
         if len(prepare_responses) < self.proposer.how_many_is_a_quorum():
-            raise tornado.web.HTTPError(status_code=409,
-                                        log_message="Failed to get the required number of promises. {}/{}".format(
+            raise tornado.web.HTTPError(status_code=412,  # Precondition failed. The required quorum is not available.
+                                        log_message="Failed to reach a quorum of acceptors. {}/{}".format(
                                         len(prepare_responses), self.proposer.how_many_is_a_quorum()))
 
         for prepare_response in prepare_responses:
             last_promise = prepare_response.last_promise
             promise = prepare_response.promise
-            if last_promise and last_promise.value == promise.value:
+            if last_promise and last_promise.prepare.proposal.value == promise.prepare.proposal.value:
                 # Another proposer has this in progress. Update the ID to match the in-progress version.
                 prepare.proposal.id = last_promise.prepare.proposal.id
+            elif last_promise and last_promise.prepare.proposal.value != promise.prepare.proposal.value:
+                raise tornado.web.HTTPError(status_code=412,  # Precondition failed.
+                                            log_message="There is an earlier promise issued for the given record.")
 
         accept_request_responses = yield self.proposer.send_propose(
             AcceptRequest(prepare.proposal))
