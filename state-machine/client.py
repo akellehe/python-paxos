@@ -23,7 +23,7 @@ def get_results(resp):
         sys.stdout.write('x')
     sys.stdout.flush()
 
-for i in range(2):
+for i in range(10):
     print("url", url)
     request = tornado.httpclient.HTTPRequest(
         url=url,
@@ -31,8 +31,8 @@ for i in range(2):
         headers={'Content-Type': 'application/json'},
         body=json.dumps({
             "key": "foo", 
-            "predicate": "This is the {} update!".format(random.random()),
-            "argument": 1
+            "predicate": "This is update #{}".format(i),
+            "argument": i
         }), 
     )
     client.fetch(request, callback=get_results)

@@ -92,14 +92,16 @@ class Phase:
     def send(self, quorum):
         if not hasattr(self, 'endpoint'):
             raise NotImplementedError("Set an endpoint for the model.")
-        responses = []
+        responses, issued, conflicting = [], [], []
         for agent in quorum:
             logger.info("Sending request to agent %s", agent)
             resp = yield agent.send(self)
-            logger.info("Got code %s with message %s, and error %s", resp.code, resp.body, resp.error)
+            responses.append(resp)
             if resp.code == 200:
-                responses.append(resp)
-        raise tornado.gen.Return(responses)
+                issued.append(resp)
+            elif resp.code == 400:
+                conflicting.append(resp)
+        raise tornado.gen.Return(tuple([responses, issued, conflicting]))
 
 
 class Prepare(Phase):
@@ -166,16 +168,19 @@ class Promises(Phase):
     def clear(self):
         self.promises = collections.defaultdict(dict)
 
+    def __contains__(self, promise):
+        key = promise.prepare.key
+        id = promise.prepare.id
+        return key in self.promises and id in self.promises[key]
+
     def remove(self, prepare):
         try:
             del self.promises[prepare.key][prepare.id]
             if not self.promises[prepare.key]:
                 del self.promises[prepare.key]
         except KeyError:
-            raise Exception("Promise k={}, id={} already removed.".format(
-                prepare.key, prepare.id
-            ))
-            
+            logger.warning("Already removed promise %s", prepare)
+
     @classmethod
     def from_responses(cls, responses):
         promises = [Promise.from_response(response)
