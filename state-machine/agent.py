@@ -65,7 +65,7 @@ class Proposer(Handler):
             promises = Promises.from_responses(responses)
             earlier_promise = promises.highest_numbered()
             if earlier_promise:
-                prepares.append(earlier_promise)
+                prepares.append(earlier_promise.prepare)
                 prepares.append(prepare)
 
         # Now we have a promise.

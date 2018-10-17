@@ -1,4 +1,6 @@
 import random
+import tornado.httpclient
+import tornado.ioloop
 import json
 import sys
 import collections
@@ -12,22 +14,27 @@ failures = collections.defaultdict(int)
 # Distinguished proposer/learner
 url = AGENT_URL + ':8888/write'
 
-def sync():
-    response = requests.post(
-        url,
-        data=json.dumps({
-            "key": "foo", 
-            "predicate": "This is the {} update!".format(random.random()),
-            "argument": 1
-        }), 
-        headers={'Content-Type': 'application/json'})
+client = tornado.httpclient.AsyncHTTPClient()
 
-    print(response.text)
-    if 200 <= response.status_code < 300:
+def get_results(resp):
+    if 200 <= resp.code < 300:
         sys.stdout.write('.')
     else:
         sys.stdout.write('x')
     sys.stdout.flush()
 
-sync()
+for i in range(2):
+    print("url", url)
+    request = tornado.httpclient.HTTPRequest(
+        url=url,
+        method='POST',
+        headers={'Content-Type': 'application/json'},
+        body=json.dumps({
+            "key": "foo", 
+            "predicate": "This is the {} update!".format(random.random()),
+            "argument": 1
+        }), 
+    )
+    client.fetch(request, callback=get_results)
 
+tornado.ioloop.IOLoop.current().start()
