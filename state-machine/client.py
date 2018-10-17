@@ -18,12 +18,13 @@ client = tornado.httpclient.AsyncHTTPClient()
 
 def get_results(resp):
     if 200 <= resp.code < 300:
-        sys.stdout.write('.')
+        sys.stdout.write(resp.body + "\n")
+        # sys.stdout.write('.')
     else:
         sys.stdout.write('x')
     sys.stdout.flush()
 
-for i in range(10):
+for i in range(1):
     print("url", url)
     request = tornado.httpclient.HTTPRequest(
         url=url,
@@ -32,7 +33,7 @@ for i in range(10):
         body=json.dumps({
             "key": "foo", 
             "predicate": "This is update #{}".format(i),
-            "argument": i
+            "argument": random.random()
         }), 
     )
     client.fetch(request, callback=get_results)

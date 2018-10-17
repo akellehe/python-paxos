@@ -28,6 +28,7 @@ logging.basicConfig(format='%(levelname)s - %(filename)s:L%(lineno)d pid=%(proce
 logger = logging.getLogger('agent')
 current_promises = Promises()
 completed_rounds = Promises()
+ordered_rounds = []
 
 
 class Handler(tornado.web.RequestHandler):
@@ -62,7 +63,7 @@ class Proposer(Handler):
             logger.info("Got %s issued and %s conflicting", len(issued), len(conflicting))
             logger.info("Response codes: %s", ", ".join([str(r.code) for r in responses]))
             if conflicting: # Issue another promise.
-                logger.warning("Issuing a later promise after %s was rejected".format(prepare.id))
+                logger.warning("%s was pre-empted by a higher ballot. retrying.".format(prepare.id))
                 prepares.append(
                     Prepare(key=prepare.key,
                             predicate=prepare.predicate,
@@ -73,7 +74,7 @@ class Proposer(Handler):
                     log_message='FAILED to acquire quorum on Promise')
             promises = Promises.from_responses(responses)
             earlier_promise = promises.highest_numbered()
-            if earlier_promise and earlier_promise not in current_promises:
+            if earlier_promise and earlier_promise not in current_promises: # Repair.
                 prepares.append(prepare)
                 prepare = earlier_promise.prepare
 
@@ -120,7 +121,6 @@ class PrepareAcceptor(Handler):
                 logger.info("Must complete earlier promise first: %s", in_progress)
                 self.respond(code=200, message=in_progress)
             else:
-                #raise Exception("We should never get here.")
                 logger.info("New promise is higher. Issuing promise.")
                 self.respond(code=200, message=Promise())
         elif last_accepted is None or prepare.id > last_accepted.prepare.id:
@@ -151,6 +151,7 @@ class Learner(Handler):
         learn = Learn.from_request(self.request)
         logger.info("Adding new learn, %s, to completed rounds.", learn.to_json())
         completed_rounds.add(learn)
+        ordered_rounds.append(learn)
         success = Success(prepare=learn.prepare)
         self.respond(code=200, message=success)
 
@@ -158,13 +159,10 @@ class Learner(Handler):
 class Reader(Handler):
 
     def get(self):
-        committed = collections.defaultdict(dict)
-        for key, promises in completed_rounds.promises.items():
-            for id, promise in promises.items():
-                committed[key][id] = promise.prepare.to_json()
+        for promise in ordered_rounds:
+            self.write(json.dumps(promise.to_json()) + "\n")
         self.set_status(200)
         self.set_header('Content-Type', 'application/json')
-        self.write(json.dumps(committed))
         self.finish()
 
 
