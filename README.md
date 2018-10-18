@@ -1,40 +1,32 @@
 # Paxos
 
+Don't use this code. It is not a reliable implementation of the algorithm since it has no mechanism for bootstrapping, leader election, or failover. It is a bare bones implementation of the state machine algorithm described in Leslie Lamport's "Basic Paxos" paper.
+
+
 ## Getting started
-
-You should add the following lines to `/etc/hosts`
-
-```
-127.0.0.1   learner.io
-127.0.0.1   acceptor.io
-127.0.0.1   proposer.io
-```
 
 Then you can get up and running by just running `./bootstrap.sh`.
 
-It will start:
+It will start three agents. Each one is a proposer, a learner, and an acceptor.
 
- - 1 Proposer/Leader
- - 3 Acceptors
- - 1 Learner
+The agent running on port 8888 is the _distinguished_ proposer and learner.
 
-Then you can call them using `client.py` by running 
+This implementation is completely ephemeral, so if a node goes down you do not get the full fault tolerance the algorithm would otherwise guarantee.
+
+
+You can send a bunch of asynchronous requests by calling
 
 ```
-python3 client.py
+python client.py
 ```
 
 If you want to send new proposals, you can modify `client.py`
 
-## Known Issues
+## Known issues
 
- - The Proposer needs to stop what it is doing when it gets an earlier promise, and finish the earlier promise.
+There are three failing tests. I updated a few things at the last minute, and those tests broke. I'm 95% sure this implementation is correct. I'll do another review of it at a later date.
 
 ## Questions for the next meetup.
-
- - Is it OK to consider a message `COMMITTED` if we only receive 1 `ACCEPTED` message from an acceptor?
- - What happens when a learner goes away? How does paxos provide a mechanism for them to re-sync?
- - What happens when there is an acceptor split brain?
 
 Check out these resources for more information:
  - https://docs.google.com/presentation/d/1OGKyQZZ1aV6w8bGoWaQVwzjFDwoqfYM6xjAF22rA18k/edit#slide=id.g41ff1175c6_0_53
