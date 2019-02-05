@@ -158,12 +158,21 @@ class Promise(Phase):
 
 class Promises(Phase):
 
+    current = None
+    completed = None
+
     def __init__(self, promises=None):
         self.promises = collections.defaultdict(dict)
         if promises is None:
             return
         for promise in promises:
             self.promises[promise.prepare.key][promise.prepare.id] = promise
+        if Promises.current is None:
+            Promises.current = True
+            Promises.current = Promises()
+        if Promises.completed is None:
+            Promises.completed = True
+            Promises.completed = Promises()
 
     def clear(self):
         self.promises = collections.defaultdict(dict)

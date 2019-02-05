@@ -12,7 +12,7 @@ from settings import AGENT_URL, AGENT_PORTS
 failures = collections.defaultdict(int)
 
 # Distinguished proposer/learner
-url = AGENT_URL + ':8888/write'
+url = AGENT_URL + ':9999/write'
 
 client = tornado.httpclient.AsyncHTTPClient()
 
@@ -21,6 +21,7 @@ def get_results(resp):
         sys.stdout.write(resp.body + "\n")
         # sys.stdout.write('.')
     else:
+        print(resp.body)
         sys.stdout.write('x')
     sys.stdout.flush()
 

@@ -1,5 +1,5 @@
 import unittest
-import mock
+from unittest import mock
 import json
 
 import tornado.testing
@@ -7,7 +7,8 @@ import tornado.httpclient
 import tornado.concurrent
 
 import agent
-from models import (
+from paxos.learner import Learner
+from paxos.models import (
     Accept, Agent, Agents, agents, Learn, Phase, Prepare, Promise,
     Promises, Propose, Success
 )
@@ -90,7 +91,7 @@ class TestPhase(tornado.testing.AsyncTestCase):
         client.fetch.return_value = fut
         with mock.patch('tornado.httpclient.AsyncHTTPClient',
                         return_value=client):
-            responses = yield phase.send(agents.quorum())
+            responses, issued, conflicting = yield phase.send(agents.quorum())
             self.assertEqual(len(responses), len(agents.quorum()))
 
 
@@ -113,7 +114,7 @@ class TestSubclasses(tornado.testing.AsyncTestCase):
             with mock.patch('tornado.httpclient.AsyncHTTPClient',
                             return_value=client):
                 agent = agents.all()[0]
-                responses = yield obj.send([agent])
+                responses, _, _ = yield obj.send([agent])
                 self.assertEqual(len(responses), 1)
                 req.assert_any_call(
                     url=agent.url + ':' + str(agent.port) + obj.endpoint,
@@ -121,7 +122,6 @@ class TestSubclasses(tornado.testing.AsyncTestCase):
                     headers={'Content-Type': 'application/json'},
                     body=json.dumps(obj.to_json())
                 )
-
 
     @tornado.testing.gen_test
     def test_prepare(self):
@@ -226,9 +226,10 @@ class Base(tornado.testing.AsyncHTTPTestCase):
         return Prepare(id=1, key='foo', predicate='set', argument='a')
 
     def setUp(self):
-        agent.current_promises.clear()
-        agent.completed_rounds.clear()
+        Promises.current.clear()
+        Learner.completed_rounds.clear()
         super(Base, self).setUp()
+
 
 class TestProposer(Base):
 
@@ -239,22 +240,22 @@ class TestProposer(Base):
         prepare_success.code = 200
         prepare_success.body = json.dumps(promise.to_json())
         fut = tornado.concurrent.Future()
-        fut.set_result([prepare_success, prepare_success])
+        fut.set_result(tuple([[prepare_success, prepare_success], [prepare_success, prepare_success], []]))
 
         propose_success = mock.Mock()
         propose_success.code = 200
         propose_success.body = json.dumps(Promise(prepare=prepare).to_json())
         propose_fut = tornado.concurrent.Future()
-        propose_fut.set_result([propose_success, propose_success])
+        propose_fut.set_result(tuple([[propose_success, propose_success], [propose_success, propose_success], []]))
 
         learn_success = mock.Mock()
         learn_success.code = 200
         learn_success.body = ''
         learn_fut = tornado.concurrent.Future()
-        learn_fut.set_result([learn_success, learn_success])
-        with mock.patch('models.Prepare.send', return_value=fut) as send:
-            with mock.patch('models.Propose.send', return_value=propose_fut) as propose_send:
-                with mock.patch('models.Learn.fanout', return_value=learn_fut) as learn_fanout:
+        learn_fut.set_result(tuple([[learn_success, learn_success], [learn_success, learn_success], []]))
+        with mock.patch('paxos.models.Prepare.send', return_value=fut) as send:
+            with mock.patch('paxos.models.Propose.send', return_value=propose_fut) as propose_send:
+                with mock.patch('paxos.models.Learn.fanout', return_value=learn_fut) as learn_fanout:
                     response = self.post('/write', body={
                         'key': 'foo',
                         'predicate': 'set',
@@ -272,7 +273,7 @@ class TestPrepareAcceptor(Base):
         success = self.post('/prepare', higher_prepare.to_json())
         self.assertEqual(success.code, 200)
         self.assertEqual(Promise.from_response(success).to_json(), {'prepare': None})
-        self.assertEqual(agent.current_promises.highest_numbered().to_json(),
+        self.assertEqual(Promises.current.highest_numbered().to_json(),
                          {'prepare': higher_prepare.to_json()})
 
         failure = self.post('/prepare', lower_prepare.to_json())
@@ -287,7 +288,7 @@ class TestPrepareAcceptor(Base):
         success = self.post('/prepare', lower_prepare.to_json())
         self.assertEqual(success.code, 200)
         self.assertEqual(Promise.from_response(success).to_json(), {'prepare': None})
-        self.assertEqual(agent.current_promises.highest_numbered().to_json(),
+        self.assertEqual(Promises.current.highest_numbered().to_json(),
                          {'prepare': lower_prepare.to_json()})
 
         failure = self.post('/prepare', higher_prepare.to_json())
@@ -300,9 +301,9 @@ class TestProposeAcceptor(Base):
 
     def test_propose_acceptor_removes_promise(self):
         promise = Promise(prepare=self.get_prepare())
-        agent.current_promises.add(promise)
+        Promises.current.add(promise)
 
-        self.assertEqual(agent.current_promises.highest_numbered().to_json(),
+        self.assertEqual(Promises.current.highest_numbered().to_json(),
                          promise.to_json())
 
         propose = Propose(prepare=self.get_prepare())
@@ -312,7 +313,7 @@ class TestProposeAcceptor(Base):
             Accept.from_response(response).to_json(),
             {'prepare': self.get_prepare().to_json()})
 
-        self.assertIsNone(agent.current_promises.highest_numbered())
+        self.assertIsNone(Promises.current.highest_numbered())
 
 
 
@@ -325,7 +326,7 @@ class TestLearner(Base):
         self.assertEqual(
             Success.from_response(response).to_json(),
             {'status': 'SUCCESS', 'prepare': self.get_prepare().to_json()})
-        self.assertEqual(agent.completed_rounds.highest_numbered().prepare.to_json(),
+        self.assertEqual(Learner.completed_rounds.highest_numbered().prepare.to_json(),
                          self.get_prepare().to_json())
 
 
