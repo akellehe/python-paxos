@@ -3,13 +3,14 @@ from unittest import mock
 import json
 
 import tornado.testing
+import tornado.gen
 import tornado.httpclient
 import tornado.concurrent
 
 import agent
 from paxos.learner import Learner
 from paxos.models import (
-    Accept, Agent, Agents, agents, Learn, Phase, Prepare, Promise,
+    Accept, agents, Learn, Phase, Prepare, Promise,
     Promises, Propose, Success
 )
 
@@ -17,22 +18,22 @@ from paxos.models import (
 class TestPhase(tornado.testing.AsyncTestCase):
 
     def test_to_json(self):
-        prepare = Prepare(id=1, 
-            key='foo', predicate='incr', argument=1)
+        prepare = Prepare(id=1,
+                          key='foo', predicate='incr', argument=1)
         phase = Phase(prepare=prepare)
         self.assertEqual(phase.to_json(),
-            {'prepare': {
-                'id': 1, 
-                'key': 'foo', 
-                'predicate': 'incr', 
-                'argument': 1}})
+                         {'prepare': {
+                             'id': 1,
+                             'key': 'foo',
+                             'predicate': 'incr',
+                             'argument': 1}})
 
     def test_from_request(self):
         request = tornado.httpclient.HTTPRequest(
-            body= json.dumps({'prepare': {
-                'id': 2, 
-                'key': 'bar', 
-                'predicate': 'decr', 
+            body=json.dumps({'prepare': {
+                'id': 2,
+                'key': 'bar',
+                'predicate': 'decr',
                 'argument': -1}}),
             method='POST',
             headers={'Content-Type': 'application/json'},
@@ -47,7 +48,7 @@ class TestPhase(tornado.testing.AsyncTestCase):
     @tornado.testing.gen_test
     def test_fanout(self):
         prepare = Prepare(id=1,
-            key='foo', predicate='incr', argument=1)
+                          key='foo', predicate='incr', argument=1)
         phase = Phase(prepare=prepare)
 
         fut = tornado.concurrent.Future()
@@ -71,7 +72,7 @@ class TestPhase(tornado.testing.AsyncTestCase):
                           key='foo', predicate='incr', argument=1)
         phase = Phase(prepare=prepare)
         with self.assertRaises(NotImplementedError):
-            should_fail = yield phase.fanout()
+            _ = yield phase.fanout()
 
     @tornado.testing.gen_test
     def test_send(self):
@@ -98,7 +99,7 @@ class TestPhase(tornado.testing.AsyncTestCase):
 class TestSubclasses(tornado.testing.AsyncTestCase):
 
     @tornado.gen.coroutine
-    def assert_send_works(self, obj, expected_endpoint):
+    def assert_send_works(self, obj, _):
         fut = tornado.concurrent.Future()
         response = mock.Mock()
         response.body = '{}'
@@ -108,16 +109,14 @@ class TestSubclasses(tornado.testing.AsyncTestCase):
         client.fetch = mock.Mock()
         client.fetch.return_value = fut
 
-        random_agent = agents.quorum()[0]
-
         with mock.patch('tornado.httpclient.HTTPRequest') as req:
             with mock.patch('tornado.httpclient.AsyncHTTPClient',
                             return_value=client):
-                agent = agents.all()[0]
-                responses, _, _ = yield obj.send([agent])
+                agnt = agents.all()[0]
+                responses, _, _ = yield obj.send([agnt])
                 self.assertEqual(len(responses), 1)
                 req.assert_any_call(
-                    url=agent.url + ':' + str(agent.port) + obj.endpoint,
+                    url=agnt.url + ':' + str(agnt.port) + obj.endpoint,
                     method='POST',
                     headers={'Content-Type': 'application/json'},
                     body=json.dumps(obj.to_json())
@@ -222,7 +221,8 @@ class Base(tornado.testing.AsyncHTTPTestCase):
                           body=json.dumps(body),
                           headers={'Content-Type': 'application/json'})
 
-    def get_prepare(self):
+    @classmethod
+    def get_prepare(cls):
         return Prepare(id=1, key='foo', predicate='set', argument='a')
 
     def setUp(self):
@@ -253,9 +253,9 @@ class TestProposer(Base):
         learn_success.body = ''
         learn_fut = tornado.concurrent.Future()
         learn_fut.set_result(tuple([[learn_success, learn_success], [learn_success, learn_success], []]))
-        with mock.patch('paxos.models.Prepare.send', return_value=fut) as send:
-            with mock.patch('paxos.models.Propose.send', return_value=propose_fut) as propose_send:
-                with mock.patch('paxos.models.Learn.fanout', return_value=learn_fut) as learn_fanout:
+        with mock.patch('paxos.models.Prepare.send', return_value=fut):
+            with mock.patch('paxos.models.Propose.send', return_value=propose_fut):
+                with mock.patch('paxos.models.Learn.fanout', return_value=learn_fut):
                     response = self.post('/write', body={
                         'key': 'foo',
                         'predicate': 'set',
@@ -314,7 +314,6 @@ class TestProposeAcceptor(Base):
             {'prepare': self.get_prepare().to_json()})
 
         self.assertIsNone(Promises.current.highest_numbered())
-
 
 
 class TestLearner(Base):

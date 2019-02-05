@@ -10,4 +10,3 @@ class Handler(tornado.web.RequestHandler):
         self.set_header('Content-Type', 'application/json')
         self.write(json.dumps(message.to_json()))
         self.finish()
-

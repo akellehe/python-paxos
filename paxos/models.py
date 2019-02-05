@@ -13,6 +13,7 @@ logging.basicConfig(format='%(levelname)s - %(filename)s:L%(lineno)d pid=%(proce
 prepare_id_mutex = threading.Lock()
 logger = logging.getLogger('agent')
 
+
 class Agent:
 
     def __init__(self, url, port):
@@ -33,37 +34,37 @@ class Agent:
 
     def __repr__(self):
         return "<Agent url={}, port={}>".format(self.url, self.port)
-       
+
 
 class Agents:
 
-    def __init__(self, agents):
-        self.agents = agents
+    def __init__(self, agnts):
+        self.agents = agnts
 
     def quorum(self, excluding=None):
         random.shuffle(self.agents)
-        agents = [a for a in self.agents if a.port != excluding]
+        agnts = [a for a in self.agents if a.port != excluding]
         required_for_quorum = int(len(self.agents) / 2) + 1
-        return agents[0:required_for_quorum]
+        return agnts[0:required_for_quorum]
 
     def all(self):
         return self.agents
 
 
-agents = Agents([Agent(AGENT_URL, port) 
-    for port in AGENT_PORTS])
+agents = Agents([Agent(AGENT_URL, port)
+                 for port in AGENT_PORTS])
 
 
 class Phase:
 
     def __init__(self, prepare=None):
-        self.prepare = prepare 
+        self.prepare = prepare
 
     def to_json(self):
         return {
             'prepare': self.prepare.to_json() if self.prepare else None
         }
-    
+
     @classmethod
     def from_request(cls, request):
         js = json.loads(request.body)
@@ -75,7 +76,6 @@ class Phase:
     @classmethod
     def from_response(cls, response):
         return cls.from_request(response)
-
 
     @tornado.gen.coroutine
     def fanout(self, expected=None):
@@ -104,18 +104,18 @@ class Phase:
         raise tornado.gen.Return(tuple([responses, issued, conflicting]))
 
 
+# noinspection PyMissingConstructor
 class Prepare(Phase):
-
     _id = 0
     endpoint = '/prepare'
-    
+
     def __init__(self, id=None, key=None, predicate=None, argument=None):
         self.id = id
         if id is None:
-            with prepare_id_mutex: 
+            with prepare_id_mutex:
                 self.id = Prepare._id
                 Prepare._id += 1
-        
+
         self.key = key
         self.predicate = predicate
         self.argument = argument
@@ -137,7 +137,6 @@ class Prepare(Phase):
 
 
 class Promise(Phase):
-
     endpoint = '/promise'
 
     @classmethod
@@ -157,10 +156,10 @@ class Promise(Phase):
 
 
 class Promises(Phase):
-
     current = None
     completed = None
 
+    # noinspection PyMissingConstructor
     def __init__(self, promises=None):
         self.promises = collections.defaultdict(dict)
         if promises is None:
@@ -193,7 +192,7 @@ class Promises(Phase):
     @classmethod
     def from_responses(cls, responses):
         promises = [Promise.from_response(response)
-            for response in responses]
+                    for response in responses]
         return Promises([p for p in promises if p.prepare is not None])
 
     def highest_promise_for_key(self, key):
@@ -220,20 +219,24 @@ class Promises(Phase):
     def get(self, key):
         if not self.promises[key]:
             return
-        id = max(self.promises[key])
+        id = max(self.promises[key])  # Returns the maximum value by id. Introspection has it wrong.
         return self.promises[key][id]
+
 
 class Propose(Phase):
     endpoint = '/propose'
- 
+
+
 class Accept(Phase):
     endpoint = '/accept'
+
 
 class Learn(Phase):
     endpoint = '/learn'
 
     def __repr__(self):
         return "<Learn id={}>".format(self.prepare.id)
+
 
 class Success(Phase):
 
@@ -242,4 +245,3 @@ class Success(Phase):
             'prepare': self.prepare.to_json(),
             'status': 'SUCCESS',
         }
-

@@ -8,7 +8,7 @@ import tornado.httpserver
 import tornado.options
 import tornado.web
 import tornado.gen
-from tornado.options import define, options
+from tornado.options import options
 
 from paxos.api import Handler
 
@@ -37,19 +37,20 @@ class Proposer(Handler):
             argument: <str|int>
         }
         """
+        successes = []
         request = json.loads(self.request.body)
         prepare = Prepare(**request)
         prepares = collections.deque([prepare])
         Promises.current.add(Promise(prepare=prepare))
         quorum = agents.quorum(excluding=options.port)
-        while prepares: # TODO: Timeout here.
+        while prepares:  # TODO: Timeout here.
             prepare = prepares.popleft()
             logging.info("Sending prepare for %s", prepare)
             send_response = yield prepare.send(quorum)
             responses, issued, conflicting = send_response
             logger.info("Got %s issued and %s conflicting", len(issued), len(conflicting))
             logger.info("Response codes: %s", ", ".join([str(r.code) for r in responses]))
-            if conflicting: # Issue another promise.
+            if conflicting:  # Issue another promise.
                 logger.warning("%s was pre-empted by a higher ballot. retrying.".format(prepare.id))
                 prepares.append(
                     Prepare(key=prepare.key,
@@ -61,7 +62,7 @@ class Proposer(Handler):
                                             log_message='FAILED to acquire quorum on Promise')
             promises = Promises.from_responses(responses)
             earlier_promise = promises.highest_numbered()
-            if earlier_promise and earlier_promise not in Promises.current: # Repair.
+            if earlier_promise and earlier_promise not in Promises.current:  # Repair.
                 prepares.append(prepare)
                 prepare = earlier_promise.prepare
 

@@ -10,7 +10,6 @@ logger = logging.getLogger('agent')
 
 
 class Learner(Handler):
-
     ordered_rounds = []
     completed_rounds = Promises()
 

@@ -32,7 +32,8 @@ class PrepareAcceptor(Handler):
                 # than ours. Abort.
                 logger.warning("Existing promise is higher.")
                 self.respond(code=400, message=in_progress)
-            elif last_accepted is None or (in_progress.prepare.id > last_accepted.prepare.id): # >= since we could have just learned but not removed the existing process because this is all async
+            elif last_accepted is None or (
+                    in_progress.prepare.id > last_accepted.prepare.id):  # >= since we could have just learned but not removed the existing process because this is all async
                 # Complete the in-progress promise first
                 # Possible for the incoming promise to have the same ID as the existing one.
                 logger.info("Must complete earlier promise first: %s", in_progress)
