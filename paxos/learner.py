@@ -21,3 +21,5 @@ class Learner(Handler):
         Learner.ordered_rounds.append(learn)
         success = Success(prepare=learn.prepare)
         self.respond(code=200, message=success)
+
+    def which_multipromises_to_send(self):

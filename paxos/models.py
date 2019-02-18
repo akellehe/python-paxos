@@ -104,6 +104,21 @@ class Phase:
         raise tornado.gen.Return(tuple([responses, issued, conflicting]))
 
 
+class MultiPrepare(Phase):
+
+    def __init__(self, start=0, stop=float('inf'), key=None):
+        self.start = start
+        self.stop = stop
+        self.key = key
+
+    def to_json(self):
+        return {
+            'start': self.start,
+            'stop': self.stop,
+            'key': self.key
+        }
+
+
 # noinspection PyMissingConstructor
 class Prepare(Phase):
     _id = 0
@@ -136,6 +151,24 @@ class Prepare(Phase):
         return "<Prepare id={}>".format(self.id)
 
 
+class MultiPromise(Phase):
+
+    endpoint = '/promise'
+
+    def __init__(self, prepare):
+        self.prepare = prepare
+
+    @classmethod
+    def from_response(cls, response):
+        resp = json.loads(response.body)
+        return MultiPromise(**resp)
+
+    def to_json(self):
+        return {
+            'prepare': self.prepare
+        }
+
+
 class Promise(Phase):
     endpoint = '/promise'
 
@@ -159,6 +192,11 @@ class Promises(Phase):
     current = None
     completed = None
 
+    @classmethod
+    def initialize(cls):
+        cls.current = Promises()
+        cls.completed = Promises()
+
     # noinspection PyMissingConstructor
     def __init__(self, promises=None):
         self.promises = collections.defaultdict(dict)
@@ -166,12 +204,10 @@ class Promises(Phase):
             return
         for promise in promises:
             self.promises[promise.prepare.key][promise.prepare.id] = promise
-        if Promises.current is None:
-            Promises.current = True
-            Promises.current = Promises()
-        if Promises.completed is None:
-            Promises.completed = True
-            Promises.completed = Promises()
+
+    def prefetch(self):
+        # Get lots of promises here.
+        pass
 
     def clear(self):
         self.promises = collections.defaultdict(dict)
@@ -245,3 +281,4 @@ class Success(Phase):
             'prepare': self.prepare.to_json(),
             'status': 'SUCCESS',
         }
+

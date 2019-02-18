@@ -15,6 +15,8 @@ from paxos.api import Handler
 from paxos.models import (
     agents,
     Learn,
+    MultiPrepare,
+    MultiPromise,
     Prepare,
     Promise,
     Promises,
@@ -24,6 +26,17 @@ from paxos.models import (
 
 logging.basicConfig(format='%(levelname)s - %(filename)s:L%(lineno)d pid=%(process)d - %(message)s')
 logger = logging.getLogger('agent')
+
+
+def get_promises_for_key(key, start=None, stop=None):
+    """
+    Makes the initial request for all promises [0, inf] for a given `key`.
+
+    The acceptor will respond with the
+    """
+    mp = MultiPrepare(key=key)
+    quorum = agents.quorum(excluding=options.port)
+    Promises.current.add(MultiPromise(mp))
 
 
 class Proposer(Handler):
@@ -73,7 +86,6 @@ class Proposer(Handler):
                 successes = yield Learn(prepare).fanout(expected=Success)
             elif conflicting:
                 logger.error("Conflicting promise detected. Will re-issue.")
-                raise Exception("Conflicting promise detected.")
             else:
                 raise tornado.web.HTTPError(status_code=500,
                                             log_message='Failed to acquire quorum on Accept')

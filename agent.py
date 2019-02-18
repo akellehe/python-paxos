@@ -12,6 +12,7 @@ from tornado.options import define, options
 from paxos.acceptor import PrepareAcceptor, ProposeAcceptor
 from paxos.proposer import Proposer
 from paxos.learner import Learner
+from paxos.models import Promises
 
 from paxos.api import Handler
 
@@ -51,6 +52,7 @@ def main():
 
     :return:
     """
+    Promises.initialize()
     tornado.options.parse_command_line()
     application = get_app()
     http_server = tornado.httpserver.HTTPServer(application)

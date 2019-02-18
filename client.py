@@ -17,7 +17,7 @@ client = tornado.httpclient.AsyncHTTPClient()
 
 def get_results(resp):
     if 200 <= resp.code < 300:
-        sys.stdout.write(resp.body + "\n")
+        sys.stdout.write(resp.body.decode('utf-8') + "\n")
         # sys.stdout.write('.')
     else:
         print(resp.body)
